@@ -6,9 +6,7 @@ public class Iso8583Parser {
 
     private final Map<Integer, IsoFieldDefinition> definitions;
 
-    public Iso8583Parser(
-            Map<Integer, IsoFieldDefinition> definitions
-    ) {
+    public Iso8583Parser(Map<Integer, IsoFieldDefinition> definitions) {
 
         if (definitions == null) {
 
@@ -46,16 +44,9 @@ public class Iso8583Parser {
                 null
         );
 
-        String mti =
-                message.substring(
-                        position,
-                        position + 4
-                );
+        String mti = message.substring(position, position + 4);
 
-        validateMti(
-                mti,
-                position
-        );
+        validateMti(mti, position);
 
         position += 4;
 
@@ -71,11 +62,7 @@ public class Iso8583Parser {
                 null
         );
 
-        String primaryBitmap =
-                message.substring(
-                        position,
-                        position + 16
-                );
+        String primaryBitmap = message.substring(position, position + 16);
 
         validateBitmap(
                 primaryBitmap,
@@ -85,10 +72,7 @@ public class Iso8583Parser {
 
         position += 16;
 
-        String binaryPrimaryBitmap =
-                BitmapUtil.hexToBinary(
-                        primaryBitmap
-                );
+        String binaryPrimaryBitmap = BitmapUtil.hexToBinary(primaryBitmap);
 
         // =========================
         // 4. Secondary Bitmap
@@ -101,7 +85,6 @@ public class Iso8583Parser {
                 );
 
         String secondaryBitmap = null;
-
         String binarySecondaryBitmap = null;
 
         if (hasSecondaryBitmap) {
@@ -114,11 +97,7 @@ public class Iso8583Parser {
                     null
             );
 
-            secondaryBitmap =
-                    message.substring(
-                            position,
-                            position + 16
-                    );
+            secondaryBitmap = message.substring(position, position + 16);
 
             validateBitmap(
                     secondaryBitmap,
@@ -128,10 +107,7 @@ public class Iso8583Parser {
 
             position += 16;
 
-            binarySecondaryBitmap =
-                    BitmapUtil.hexToBinary(
-                            secondaryBitmap
-                    );
+            binarySecondaryBitmap = BitmapUtil.hexToBinary(secondaryBitmap);
         }
 
         // =========================
@@ -150,7 +126,9 @@ public class Iso8583Parser {
         // =========================
 
         IsoMessage isoMessage = new IsoMessage();
+
         isoMessage.setMti(mti);
+
         isoMessage.setBitmap(primaryBitmap);
 
         printBitmapInformation(
@@ -174,16 +152,14 @@ public class Iso8583Parser {
                 continue;
             }
 
-            ParsedField parsedField = parseField(
-                    message,
-                    position,
-                    field
-            );
+            ParsedField parsedField =
+                    parseField(
+                            message,
+                            position,
+                            field
+                    );
 
-            isoMessage.setField(
-                    field,
-                    parsedField.value()
-            );
+            isoMessage.setField(field, parsedField.value());
 
             position = parsedField.nextPosition();
         }
@@ -212,10 +188,7 @@ public class Iso8583Parser {
                                 field
                         );
 
-                isoMessage.setField(
-                        field,
-                        parsedField.value()
-                );
+                isoMessage.setField(field, parsedField.value());
 
                 position = parsedField.nextPosition();
             }
@@ -225,10 +198,7 @@ public class Iso8583Parser {
         // 9. Validate End Of Message
         // =========================
 
-        validateEndOfMessage(
-                message,
-                position
-        );
+        validateEndOfMessage(message, position);
 
         return isoMessage;
     }
@@ -252,9 +222,7 @@ public class Iso8583Parser {
         if (definition == null) {
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.FIELD_DEFINITION_NOT_FOUND,
-                    "Definition DE "
-                            + fieldNumber
-                            + " tidak ditemukan",
+                    "Definition DE " + fieldNumber + " tidak ditemukan",
                     fieldNumber,
                     position,
                     null
@@ -267,11 +235,7 @@ public class Iso8583Parser {
         // Position Validation
         // =========================
 
-        validatePosition(
-                message,
-                position,
-                fieldNumber
-        );
+        validatePosition(message, position, fieldNumber);
 
         System.out.println();
         System.out.println("Membaca DE " + fieldNumber);
@@ -283,8 +247,7 @@ public class Iso8583Parser {
         // FIXED
         // =========================
 
-        if (definition.type() ==
-                FieldType.FIXED) {
+        if (definition.type() == FieldType.FIXED) {
 
             int length = definition.maxLength();
 
@@ -296,10 +259,7 @@ public class Iso8583Parser {
                     fieldNumber
             );
 
-            value = message.substring(
-                    position,
-                    position + length
-            );
+            value = message.substring(position, position + length);
 
             position += length;
         }
@@ -308,8 +268,7 @@ public class Iso8583Parser {
         // LLVAR
         // =========================
 
-        else if (definition.type() ==
-                FieldType.LLVAR) {
+        else if (definition.type() == FieldType.LLVAR) {
 
             int prefixLength = 2;
 
@@ -317,8 +276,7 @@ public class Iso8583Parser {
                     message,
                     position,
                     prefixLength,
-                    "DE " + fieldNumber
-                            + " length indicator",
+                    "DE " + fieldNumber + " length indicator",
                     fieldNumber
             );
 
@@ -353,10 +311,7 @@ public class Iso8583Parser {
                     fieldNumber
             );
 
-            value = message.substring(
-                    position,
-                    position + length
-            );
+            value = message.substring(position, position + length);
 
             position += length;
         }
@@ -365,8 +320,7 @@ public class Iso8583Parser {
         // LLLVAR
         // =========================
 
-        else if (definition.type() ==
-                FieldType.LLLVAR) {
+        else if (definition.type() == FieldType.LLLVAR) {
 
             int prefixLength = 3;
 
@@ -374,8 +328,7 @@ public class Iso8583Parser {
                     message,
                     position,
                     prefixLength,
-                    "DE " + fieldNumber
-                            + " length indicator",
+                    "DE " + fieldNumber + " length indicator",
                     fieldNumber
             );
 
@@ -410,12 +363,7 @@ public class Iso8583Parser {
                     fieldNumber
             );
 
-            value =
-                    message.substring(
-                            position,
-                            position + length
-                    );
-
+            value = message.substring(position, position + length);
             position += length;
         }
 
@@ -423,8 +371,7 @@ public class Iso8583Parser {
 
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.INVALID_MESSAGE,
-                    "Field type tidak didukung: "
-                            + definition.type(),
+                    "Field type tidak didukung: " + definition.type(),
                     fieldNumber,
                     position,
                     null
@@ -435,24 +382,12 @@ public class Iso8583Parser {
         // Data Validation
         // =========================
 
-        try {
-            FieldValidator.validate(
-                    fieldNumber,
-                    value,
-                    definition.dataType(),
-                    startPosition
-            );
-        } catch (Iso8583ParseException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new Iso8583ParseException(
-                    Iso8583ErrorCode.FIELD_DATA_INVALID,
-                    e.getMessage(),
-                    fieldNumber,
-                    startPosition,
-                    value
-            );
-        }
+        FieldValidator.validate(
+                fieldNumber,
+                value,
+                definition.dataType(),
+                startPosition
+        );
 
         // =========================
         // Tracking Position
@@ -551,7 +486,6 @@ public class Iso8583Parser {
             String bitmapName,
             int position
     ) {
-
         if (bitmap == null || bitmap.length() != 16) {
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.INVALID_BITMAP,
