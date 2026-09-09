@@ -64,9 +64,7 @@ public class Iso8583Builder {
         return result.toString();
     }
 
-    private void validateMessage(
-            IsoMessage message
-    ) {
+    private void validateMessage(IsoMessage message) {
 
         if (message == null) {
             throw new Iso8583ParseException(
@@ -100,9 +98,7 @@ public class Iso8583Builder {
         }
     }
 
-    private String buildPrimaryBitmap(
-            IsoMessage message
-    ) {
+    private String buildPrimaryBitmap(IsoMessage message) {
 
         StringBuilder binary =
                 new StringBuilder(
@@ -132,9 +128,7 @@ public class Iso8583Builder {
         return binaryToHex(binary.toString());
     }
 
-    private String buildSecondaryBitmap(
-            IsoMessage message
-    ) {
+    private String buildSecondaryBitmap( IsoMessage message ) {
 
         StringBuilder binary =
                 new StringBuilder(
@@ -157,9 +151,7 @@ public class Iso8583Builder {
         return binaryToHex(binary.toString());
     }
 
-    private boolean hasSecondaryFields(
-            IsoMessage message
-    ) {
+    private boolean hasSecondaryFields( IsoMessage message ) {
 
         return message.getFields()
                 .keySet()

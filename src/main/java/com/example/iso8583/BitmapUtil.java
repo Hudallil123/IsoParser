@@ -122,7 +122,6 @@ public final class BitmapUtil {
     ) {
 
         if (binaryBitmap == null) {
-
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.INVALID_BITMAP,
                     "Binary bitmap tidak boleh null",
@@ -132,9 +131,7 @@ public final class BitmapUtil {
             );
         }
 
-        if (binaryBitmap.length()
-                != BITMAP_BINARY_LENGTH) {
-
+        if (binaryBitmap.length() != BITMAP_BINARY_LENGTH) {
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.INVALID_BITMAP,
                     "Panjang binary bitmap harus " +
@@ -148,11 +145,9 @@ public final class BitmapUtil {
             );
         }
 
-        for (char c :
-                binaryBitmap.toCharArray()) {
+        for (char c : binaryBitmap.toCharArray()) {
 
             if (c != '0' && c != '1') {
-
                 throw new Iso8583ParseException(
                         Iso8583ErrorCode.INVALID_BITMAP,
                         "Binary bitmap hanya boleh " +
@@ -162,6 +157,7 @@ public final class BitmapUtil {
                         binaryBitmap
                 );
             }
+
         }
     }
 }
