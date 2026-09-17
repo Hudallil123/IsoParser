@@ -237,9 +237,9 @@ public class Iso8583Parser {
 
         validatePosition(message, position, fieldNumber);
 
-        System.out.println();
-        System.out.println("Membaca DE " + fieldNumber);
-        System.out.println("Position awal : " + position);
+//        System.out.println();
+//        System.out.println("Membaca DE " + fieldNumber);
+//        System.out.println("Position awal : " + position);
 
         String value;
 
@@ -247,9 +247,9 @@ public class Iso8583Parser {
         // FIXED
         // =========================
 
-        if (definition.type() == FieldType.FIXED) {
+        if (definition.getFieldType() == FieldType.FIXED) {
 
-            int length = definition.maxLength();
+            int length = definition.getMaxLength();
 
             validateRemainingLength(
                     message,
@@ -268,7 +268,7 @@ public class Iso8583Parser {
         // LLVAR
         // =========================
 
-        else if (definition.type() == FieldType.LLVAR) {
+        else if (definition.getFieldType() == FieldType.LLVAR) {
 
             int prefixLength = 2;
 
@@ -297,7 +297,7 @@ public class Iso8583Parser {
             validateMaximumLength(
                     fieldNumber,
                     length,
-                    definition.maxLength(),
+                    definition.getMaxLength(),
                     position
             );
 
@@ -320,7 +320,7 @@ public class Iso8583Parser {
         // LLLVAR
         // =========================
 
-        else if (definition.type() == FieldType.LLLVAR) {
+        else if (definition.getFieldType() == FieldType.LLLVAR) {
 
             int prefixLength = 3;
 
@@ -349,7 +349,7 @@ public class Iso8583Parser {
             validateMaximumLength(
                     fieldNumber,
                     length,
-                    definition.maxLength(),
+                    definition.getMaxLength(),
                     position
             );
 
@@ -371,7 +371,7 @@ public class Iso8583Parser {
 
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.INVALID_MESSAGE,
-                    "Field type tidak didukung: " + definition.type(),
+                    "Field type tidak didukung: " + definition.getFieldType(),
                     fieldNumber,
                     position,
                     null
@@ -385,7 +385,7 @@ public class Iso8583Parser {
         FieldValidator.validate(
                 fieldNumber,
                 value,
-                definition.dataType(),
+                definition.getDataType(),
                 startPosition
         );
 
@@ -656,11 +656,11 @@ public class Iso8583Parser {
 
         for (IsoFieldDefinition definition : definitions.values()) {
 
-            if (!definition.required()) {
+            if (!definition.isRequired()) {
                 continue;
             }
 
-            int field = definition.number();
+            int field = definition.getFieldNumber();
 
             boolean present;
 

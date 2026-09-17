@@ -1,42 +1,30 @@
 package com.example.iso8583;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 public class Iso8583Builder {
 
-    private static final int PRIMARY_START = 2;
-
-    private static final int PRIMARY_END = 64;
-
-    private static final int SECONDARY_START = 65;
-
-    private static final int SECONDARY_END = 128;
-
     private final Map<Integer, IsoFieldDefinition> definitions;
 
-    public Iso8583Builder(
-            Map<Integer, IsoFieldDefinition> definitions
-    ) {
+    public Iso8583Builder(Map<Integer, IsoFieldDefinition> definitions) {
         this.definitions = definitions;
     }
 
-    public String build(
-            IsoMessage message
-    ) {
+    public String build(IsoMessage message) {
 
         validateMessage(message);
 
         String primaryBitmap = buildPrimaryBitmap(message);
-
         boolean hasSecondaryBitmap = hasSecondaryFields(message);
 
-        String secondaryBitmap = null;
-
-        if (hasSecondaryBitmap) {
-            secondaryBitmap = buildSecondaryBitmap(message);
-        }
+        String secondaryBitmap = hasSecondaryBitmap
+                ? buildSecondaryBitmap(message)
+                : null;
 
         StringBuilder result = new StringBuilder();
+
         result.append(message.getMti());
         result.append(primaryBitmap);
 
@@ -44,123 +32,42 @@ public class Iso8583Builder {
             result.append(secondaryBitmap);
         }
 
-        appendFields(
-                result,
-                message,
-                PRIMARY_START,
-                PRIMARY_END
-        );
+        appendFields(result, message, 2, 64);
 
         if (hasSecondaryBitmap) {
-
-            appendFields(
-                    result,
-                    message,
-                    SECONDARY_START,
-                    SECONDARY_END
-            );
+            appendFields(result, message, 65, 128);
         }
 
         return result.toString();
     }
 
-    private void validateMessage(IsoMessage message) {
+    public byte[] buildBytes(IsoMessage message) {
 
-        if (message == null) {
-            throw new Iso8583ParseException(
-                    Iso8583ErrorCode.INVALID_MESSAGE,
-                    "IsoMessage tidak boleh null",
-                    null,
-                    null,
-                    null
-            );
+        validateMessage(message);
+
+        String primaryBitmap = buildPrimaryBitmap(message);
+        boolean hasSecondaryBitmap = hasSecondaryFields(message);
+
+        String secondaryBitmap = hasSecondaryBitmap
+                ? buildSecondaryBitmap(message)
+                : null;
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+        writeAscii(output, message.getMti());
+        writeAscii(output, primaryBitmap);
+
+        if (hasSecondaryBitmap) {
+            writeAscii(output, secondaryBitmap);
         }
 
-        if (message.getMti() == null || message.getMti().isBlank()) {
-            throw new Iso8583ParseException(
-                    Iso8583ErrorCode.INVALID_MTI,
-                    "MTI tidak boleh kosong",
-                    null,
-                    null,
-                    null
-            );
+        appendFieldsBytes(output, message, 2, 64);
+
+        if (hasSecondaryBitmap) {
+            appendFieldsBytes(output, message, 65, 128);
         }
 
-        if (message.getMti().length() != 4) {
-
-            throw new Iso8583ParseException(
-                    Iso8583ErrorCode.INVALID_MTI,
-                    "MTI harus memiliki 4 karakter",
-                    null,
-                    null,
-                    message.getMti()
-            );
-        }
-    }
-
-    private String buildPrimaryBitmap(IsoMessage message) {
-
-        StringBuilder binary =
-                new StringBuilder(
-                        "0".repeat(64)
-                );
-
-        boolean hasSecondary = hasSecondaryFields(message);
-
-        if (hasSecondary) {
-            binary.setCharAt(
-                    0,
-                    '1'
-            );
-        }
-
-        for (int field : message.getFields().keySet()) {
-            if (field < PRIMARY_START || field > PRIMARY_END) {
-                continue;
-            }
-
-            binary.setCharAt(
-                    field - 1,
-                    '1'
-            );
-        }
-
-        return binaryToHex(binary.toString());
-    }
-
-    private String buildSecondaryBitmap( IsoMessage message ) {
-
-        StringBuilder binary =
-                new StringBuilder(
-                        "0".repeat(64)
-                );
-
-        for (int field : message.getFields().keySet()) {
-            if (field < SECONDARY_START || field > SECONDARY_END) {
-                continue;
-            }
-
-            int secondaryBit = field - 64;
-
-            binary.setCharAt(
-                    secondaryBit - 1,
-                    '1'
-            );
-        }
-
-        return binaryToHex(binary.toString());
-    }
-
-    private boolean hasSecondaryFields( IsoMessage message ) {
-
-        return message.getFields()
-                .keySet()
-                .stream()
-                .anyMatch(
-                        field ->
-                                field >= SECONDARY_START &&
-                                        field <= SECONDARY_END
-                );
+        return output.toByteArray();
     }
 
     private void appendFields(
@@ -170,38 +77,31 @@ public class Iso8583Builder {
             int endField
     ) {
 
-        for (int field = startField;
-             field <= endField;
-             field++) {
+        for (int field = startField; field <= endField; field++) {
 
-            String value = message.getField(field);
-
-            if (value == null) {
+            if (!BitmapUtil.isFieldPresent(
+                    buildFullBinaryBitmap(message),
+                    field
+            )) {
                 continue;
             }
 
-            IsoFieldDefinition definition = definitions.get(field);
+            String value = message.getField(field);
+
+            IsoFieldDefinition definition =
+                    definitions.get(field);
 
             if (definition == null) {
                 throw new Iso8583ParseException(
                         Iso8583ErrorCode.FIELD_DEFINITION_NOT_FOUND,
-                        "Definition DE " +
-                                field +
-                                " tidak ditemukan",
+                        "Definition DE " + field + " tidak ditemukan",
                         field,
-                        result.length(),
+                        null,
                         value
                 );
             }
 
-            FieldValidator.validate(
-                    field,
-                    value,
-                    definition.dataType(),
-                    result.length()
-            );
-
-            appendField(
+            appendFieldValue(
                     result,
                     field,
                     value,
@@ -210,31 +110,36 @@ public class Iso8583Builder {
         }
     }
 
-    private void appendField(
-            StringBuilder result,
-            int field,
-            String value,
-            IsoFieldDefinition definition
+    private void appendFieldsBytes(
+            ByteArrayOutputStream output,
+            IsoMessage message,
+            int startField,
+            int endField
     ) {
 
-        switch (definition.type()) {
+        for (int field = startField; field <= endField; field++) {
 
-            case FIXED -> appendFixedField(
-                    result,
-                    field,
-                    value,
-                    definition
-            );
+            if (!isFieldPresent(message, field)) {
+                continue;
+            }
 
-            case LLVAR -> appendLlvarField(
-                    result,
-                    field,
-                    value,
-                    definition
-            );
+            String value = message.getField(field);
 
-            case LLLVAR -> appendLllvarField(
-                    result,
+            IsoFieldDefinition definition =
+                    definitions.get(field);
+
+            if (definition == null) {
+                throw new Iso8583ParseException(
+                        Iso8583ErrorCode.FIELD_DEFINITION_NOT_FOUND,
+                        "Definition DE " + field + " tidak ditemukan",
+                        field,
+                        null,
+                        value
+                );
+            }
+
+            appendFieldBytes(
+                    output,
                     field,
                     value,
                     definition
@@ -242,116 +147,332 @@ public class Iso8583Builder {
         }
     }
 
-    private void appendFixedField(
+    private void appendFieldValue(
             StringBuilder result,
             int field,
             String value,
             IsoFieldDefinition definition
     ) {
 
-        if (value.length() != definition.maxLength()) {
-
-            throw new Iso8583ParseException(
-                    Iso8583ErrorCode.FIELD_LENGTH_INVALID,
-                    "DE " + field +
-                            " harus memiliki panjang " +
-                            definition.maxLength() +
-                            ". Actual=" +
-                            value.length(),
-                    field,
-                    result.length(),
-                    value
-            );
-        }
-
-        result.append(value);
-    }
-
-    private void appendLlvarField(
-            StringBuilder result,
-            int field,
-            String value,
-            IsoFieldDefinition definition
-    ) {
-
-        if (value.length() > definition.maxLength()) {
-
-            throw new Iso8583ParseException(
-                    Iso8583ErrorCode.FIELD_LENGTH_EXCEEDED,
-                    "DE " + field +
-                            " melebihi maximum length. " +
-                            "Actual=" +
-                            value.length() +
-                            ", Max=" +
-                            definition.maxLength(),
-                    field,
-                    result.length(),
-                    value
-            );
-        }
-
-        result.append(
-                String.format(
-                        "%02d",
-                        value.length()
-                )
+        validateFieldValue(
+                field,
+                value,
+                definition
         );
 
-        result.append(value);
+        switch (definition.getFieldType()) {
+
+            case FIXED -> {
+
+                validateFixedLength(
+                        field,
+                        value,
+                        definition
+                );
+
+                result.append(value);
+            }
+
+            case LLVAR -> {
+
+                validateVariableLength(
+                        field,
+                        value,
+                        definition,
+                        2
+                );
+
+                result.append(
+                        String.format(
+                                "%02d",
+                                value.length()
+                        )
+                );
+
+                result.append(value);
+            }
+
+            case LLLVAR -> {
+
+                validateVariableLength(
+                        field,
+                        value,
+                        definition,
+                        3
+                );
+
+                result.append(
+                        String.format(
+                                "%03d",
+                                value.length()
+                        )
+                );
+
+                result.append(value);
+            }
+        }
     }
 
-    private void appendLllvarField(
-            StringBuilder result,
+    private void appendFieldBytes(
+            ByteArrayOutputStream output,
             int field,
             String value,
             IsoFieldDefinition definition
     ) {
 
-        if (value.length() > definition.maxLength()) {
+        validateFieldValue(
+                field,
+                value,
+                definition
+        );
 
-            throw new Iso8583ParseException(
-                    Iso8583ErrorCode.FIELD_LENGTH_EXCEEDED,
-                    "DE " + field +
-                            " melebihi maximum length. " +
-                            "Actual=" +
-                            value.length() +
-                            ", Max=" +
-                            definition.maxLength(),
-                    field,
-                    result.length(),
-                    value
+        byte[] encodedValue;
+
+        switch (definition.getFieldType()) {
+
+            case FIXED -> {
+
+                validateFixedLength(
+                        field,
+                        value,
+                        definition
+                );
+
+                encodedValue =
+                        Iso8583Encoder.encodeField(
+                                value,
+                                definition
+                        );
+
+                output.writeBytes(encodedValue);
+            }
+
+            case LLVAR -> {
+
+                validateVariableLength(
+                        field,
+                        value,
+                        definition,
+                        2
+                );
+
+                writeVariableLength(
+                        output,
+                        value,
+                        definition,
+                        2
+                );
+
+                encodedValue =
+                        Iso8583Encoder.encodeField(
+                                value,
+                                definition
+                        );
+
+                output.writeBytes(encodedValue);
+            }
+
+            case LLLVAR -> {
+
+                validateVariableLength(
+                        field,
+                        value,
+                        definition,
+                        3
+                );
+
+                writeVariableLength(
+                        output,
+                        value,
+                        definition,
+                        3
+                );
+
+                encodedValue =
+                        Iso8583Encoder.encodeField(
+                                value,
+                                definition
+                        );
+
+                output.writeBytes(encodedValue);
+            }
+        }
+    }
+
+    private void writeVariableLength(
+            ByteArrayOutputStream output,
+            String value,
+            IsoFieldDefinition definition,
+            int lengthDigits
+    ) {
+
+        int logicalLength = value.length();
+
+        String lengthValue;
+
+        if (lengthDigits == 2) {
+            lengthValue =
+                    String.format(
+                            "%02d",
+                            logicalLength
+                    );
+        } else {
+            lengthValue =
+                    String.format(
+                            "%03d",
+                            logicalLength
+                    );
+        }
+
+        writeAscii(
+                output,
+                lengthValue
+        );
+    }
+
+    private void writeAscii(
+            ByteArrayOutputStream output,
+            String value
+    ) {
+
+        byte[] bytes =
+                value.getBytes(
+                        StandardCharsets.US_ASCII
+                );
+
+        output.writeBytes(bytes);
+    }
+
+    private boolean isFieldPresent(
+            IsoMessage message,
+            int field
+    ) {
+
+        String binaryBitmap =
+                buildFullBinaryBitmap(message);
+
+        return BitmapUtil.isFieldPresent(
+                binaryBitmap,
+                field
+        );
+    }
+
+    private String buildFullBinaryBitmap(
+            IsoMessage message
+    ) {
+
+        String primaryBitmap =
+                buildPrimaryBitmap(message);
+
+        String primaryBinary =
+                BitmapUtil.hexToBinary(
+                        primaryBitmap
+                );
+
+        if (!hasSecondaryFields(message)) {
+            return primaryBinary;
+        }
+
+        String secondaryBitmap =
+                buildSecondaryBitmap(message);
+
+        String secondaryBinary =
+                BitmapUtil.hexToBinary(
+                        secondaryBitmap
+                );
+
+        return primaryBinary + secondaryBinary;
+    }
+
+    private String buildPrimaryBitmap(
+            IsoMessage message
+    ) {
+
+        StringBuilder binary =
+                new StringBuilder(
+                        "0000000000000000000000000000000000000000000000000000000000000000"
+                );
+
+        for (int field = 2; field <= 64; field++) {
+
+            if (message.getField(field) != null) {
+
+                binary.setCharAt(
+                        field - 1,
+                        '1'
+                );
+            }
+        }
+
+        if (hasSecondaryFields(message)) {
+
+            binary.setCharAt(
+                    0,
+                    '1'
             );
         }
 
-        result.append(
-                String.format(
-                        "%03d",
-                        value.length()
-                )
+        return binaryToHex(
+                binary.toString()
         );
+    }
 
-        result.append(value);
+    private String buildSecondaryBitmap(
+            IsoMessage message
+    ) {
+
+        StringBuilder binary =
+                new StringBuilder(
+                        "0000000000000000000000000000000000000000000000000000000000000000"
+                );
+
+        for (int field = 65; field <= 128; field++) {
+
+            if (message.getField(field) != null) {
+
+                binary.setCharAt(
+                        field - 65,
+                        '1'
+                );
+            }
+        }
+
+        return binaryToHex(
+                binary.toString()
+        );
+    }
+
+    private boolean hasSecondaryFields(
+            IsoMessage message
+    ) {
+
+        for (int field = 65; field <= 128; field++) {
+
+            if (message.getField(field) != null) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private String binaryToHex(
             String binary
     ) {
 
-        StringBuilder hex = new StringBuilder();
+        StringBuilder hex =
+                new StringBuilder(
+                        binary.length() / 4
+                );
 
-        for (int i = 0;
-             i < binary.length();
-             i += 4) {
+        for (int i = 0; i < binary.length(); i += 4) {
 
-            String group =
-                    binary.substring(
-                            i,
-                            i + 4
-                    );
+            String chunk =
+                    binary.substring(i, i + 4);
 
             int value =
                     Integer.parseInt(
-                            group,
+                            chunk,
                             2
                     );
 
@@ -363,5 +484,121 @@ public class Iso8583Builder {
         }
 
         return hex.toString();
+    }
+
+    private void validateMessage(
+            IsoMessage message
+    ) {
+
+        if (message == null) {
+            throw new Iso8583ParseException(
+                    Iso8583ErrorCode.INVALID_MESSAGE,
+                    "Message tidak boleh null",
+                    null,
+                    null,
+                    null
+            );
+        }
+
+        if (message.getMti() == null ||
+                message.getMti().length() != 4) {
+
+            throw new Iso8583ParseException(
+                    Iso8583ErrorCode.INVALID_MTI,
+                    "MTI harus 4 karakter",
+                    null,
+                    null,
+                    message.getMti()
+            );
+        }
+    }
+
+    private void validateFieldValue(
+            int field,
+            String value,
+            IsoFieldDefinition definition
+    ) {
+
+        if (value == null) {
+
+            if (definition.isRequired()) {
+
+                throw new Iso8583ParseException(
+                        Iso8583ErrorCode.FIELD_REQUIRED_MISSING,
+                        "DE " + field + " wajib diisi",
+                        field,
+                        null,
+                        null
+                );
+            }
+
+            throw new Iso8583ParseException(
+                    Iso8583ErrorCode.INVALID_MESSAGE,
+                    "DE " + field + " value null",
+                    field,
+                    null,
+                    null
+            );
+        }
+    }
+
+    private void validateFixedLength(
+            int field,
+            String value,
+            IsoFieldDefinition definition
+    ) {
+
+        if (value.length() != definition.getMaxLength()) {
+
+            throw new Iso8583ParseException(
+                    Iso8583ErrorCode.FIELD_LENGTH_INVALID,
+                    "DE " + field +
+                            " harus memiliki length " +
+                            definition.getMaxLength() +
+                            ", actual=" +
+                            value.length(),
+                    field,
+                    null,
+                    value
+            );
+        }
+    }
+
+    private void validateVariableLength(
+            int field,
+            String value,
+            IsoFieldDefinition definition,
+            int lengthDigits
+    ) {
+
+        if (value.length() > definition.getMaxLength()) {
+
+            throw new Iso8583ParseException(
+                    Iso8583ErrorCode.FIELD_LENGTH_EXCEEDED,
+                    "DE " + field +
+                            " melebihi maximum length " +
+                            definition.getMaxLength(),
+                    field,
+                    null,
+                    value
+            );
+        }
+
+        int maxIndicator =
+                lengthDigits == 2
+                        ? 99
+                        : 999;
+
+        if (value.length() > maxIndicator) {
+
+            throw new Iso8583ParseException(
+                    Iso8583ErrorCode.FIELD_LENGTH_EXCEEDED,
+                    "DE " + field +
+                            " tidak dapat direpresentasikan oleh length indicator",
+                    field,
+                    null,
+                    value
+            );
+        }
     }
 }

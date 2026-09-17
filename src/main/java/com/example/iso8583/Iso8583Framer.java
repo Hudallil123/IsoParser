@@ -5,13 +5,12 @@ import java.nio.charset.StandardCharsets;
 public final class Iso8583Framer {
 
     private static final int HEADER_LENGTH = 4;
+    private static final int MAX_MESSAGE_LENGTH = 9999;
 
     private Iso8583Framer() {
     }
 
-    public static byte[] addLengthHeader(
-            byte[] message
-    ) {
+    public static byte[] addLengthHeader(byte[] message) {
 
         if (message == null) {
             throw new Iso8583ParseException(
@@ -25,93 +24,96 @@ public final class Iso8583Framer {
 
         int messageLength = message.length;
 
-        if (messageLength > 9999) {
+        if (messageLength > MAX_MESSAGE_LENGTH) {
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.FIELD_LENGTH_EXCEEDED,
-                    "Message terlalu panjang. Length="
-                            + messageLength,
+                    "Message terlalu panjang. Length=" + messageLength,
                     null,
                     null,
                     String.valueOf(messageLength)
             );
         }
 
-        String lengthHeader = String.format("%04d",messageLength);
+        String lengthHeader = String.format("%04d", messageLength);
 
         byte[] header = lengthHeader.getBytes(StandardCharsets.US_ASCII);
 
         byte[] result = new byte[HEADER_LENGTH + messageLength];
 
-        System.arraycopy(
-                header,
-                0,
-                result,
-                0,
-                HEADER_LENGTH
-        );
-
-        System.arraycopy(
-                message,
-                0,
-                result,
-                HEADER_LENGTH,
-                messageLength
-        );
+        System.arraycopy(header, 0, result, 0, HEADER_LENGTH);
+        System.arraycopy(message, 0, result, HEADER_LENGTH, messageLength);
 
         return result;
     }
 
-    public static int readLengthHeader(
-            byte[] data
-    ) {
+    public static int parseLengthHeader(byte[] header) {
 
-        if (data == null) {
+        if (header == null) {
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.INVALID_MESSAGE,
-                    "Data tidak boleh null",
+                    "Header tidak boleh null",
                     null,
                     null,
                     null
             );
         }
 
-        if (data.length < HEADER_LENGTH) {
+        if (header.length != HEADER_LENGTH) {
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.FIELD_DATA_INCOMPLETE,
-                    "Data belum memiliki length header lengkap",
+                    "Length header harus 4 byte",
                     null,
                     null,
                     null
             );
         }
 
-        String header =
-                new String(
-                        data,
-                        0,
-                        HEADER_LENGTH,
-                        StandardCharsets.US_ASCII
-                );
+        String value = new String(header, StandardCharsets.US_ASCII);
 
-        if (!header.matches("\\d{4}")) {
+        if (!value.matches("\\d{4}")) {
             throw new Iso8583ParseException(
                     Iso8583ErrorCode.INVALID_MESSAGE,
-                    "Length header tidak valid: "
-                            + header,
+                    "Length header tidak valid: " + value,
                     null,
-                    0,
-                    header
+                    null,
+                    value
             );
         }
 
-        return Integer.parseInt(header);
+        int length = Integer.parseInt(value);
+
+        if (length <= 0) {
+            throw new Iso8583ParseException(
+                    Iso8583ErrorCode.INVALID_MESSAGE,
+                    "Message length harus lebih besar dari 0",
+                    null,
+                    null,
+                    value
+            );
+        }
+
+        return length;
     }
 
-    public static byte[] extractMessage(
-            byte[] framedData
-    ) {
+    public static byte[] extractMessage(byte[] framedData) {
 
-        int messageLength = readLengthHeader(framedData);
+        if (framedData == null) {
+            throw new Iso8583ParseException(
+                    Iso8583ErrorCode.INVALID_MESSAGE,
+                    "Framed data tidak boleh null",
+                    null,
+                    null,
+                    null
+            );
+        }
+
+        int messageLength = parseLengthHeader(
+                java.util.Arrays.copyOfRange(
+                        framedData,
+                        0,
+                        Math.min(HEADER_LENGTH, framedData.length)
+                )
+        );
 
         int totalLength = HEADER_LENGTH + messageLength;
 
@@ -121,18 +123,14 @@ public final class Iso8583Framer {
                     "Message belum lengkap. Expected="
                             + messageLength
                             + ", Actual="
-                            + Math.max(
-                            0,
-                            framedData.length - HEADER_LENGTH
-                    ),
+                            + Math.max(0, framedData.length - HEADER_LENGTH),
                     null,
                     null,
                     null
             );
         }
 
-        byte[] message =
-                new byte[messageLength];
+        byte[] message = new byte[messageLength];
 
         System.arraycopy(
                 framedData,
@@ -144,6 +142,4 @@ public final class Iso8583Framer {
 
         return message;
     }
-
-    
 }
