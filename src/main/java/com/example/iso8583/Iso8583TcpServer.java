@@ -153,6 +153,9 @@ public class Iso8583TcpServer {
 
                     printRequest(request);
 
+                    Iso8583Mti mti = Iso8583Mti.parse(request.getMti());
+                    Iso8583MtiValidator.validateRequest(mti);
+
                     IsoMessage response = createResponse(request);
 
                     String responseIso = builder.build(response);
